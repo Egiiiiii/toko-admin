@@ -15,7 +15,7 @@
             <div class="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition"></div>
             <div class="relative p-8 text-white">
                 <div class="inline-block bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-semibold mb-4">CASHBACK</div>
-                <h3 class="text-2xl font-bold mb-2">Cashback 50%</h3>
+                <h3 class="text-2xl font-bold mb-2">Cashbackk 50%</h3>
                 <p class="text-white/90 mb-4">Maks. cashback Rp100.000</p>
                 <button class="bg-white text-orange-600 font-bold px-6 py-2 rounded-lg hover:bg-gray-100 transition">Klaim Sekarang</button>
             </div>
