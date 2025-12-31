@@ -1,4 +1,4 @@
-FROM php:8.2-fpm
+FROM php:8.4-fpm
 
 # 1. Install system dependencies & Node.js
 # Tambahkan 'libzip-dev' dan 'libicu-dev' agar PHP bisa compile ekstensi zip & intl
