@@ -1,6 +1,6 @@
 FROM php:8.2-fpm
 
-# 1. Install dependencies sistem yang diperlukan
+# 1. Install system dependencies & Node.js (untuk Tailwind)
 RUN apt-get update && apt-get install -y \
     git \
     curl \
@@ -10,39 +10,35 @@ RUN apt-get update && apt-get install -y \
     zip \
     unzip \
     libpq-dev \
-    libicu-dev \
-    libzip-dev
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs
 
-# 2. Bersihkan cache apt agar image lebih kecil
+# 2. Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# 3. Install Ekstensi PHP yang dibutuhkan Laravel & Filament
-# pdo_pgsql: untuk koneksi ke PostgreSQL
-# mbstring, exif, pcntl, bcmath, gd: standar Laravel
-# intl: untuk format mata uang/tanggal
-# zip: untuk manajemen file zip
-RUN docker-php-ext-install pdo_pgsql mbstring exif pcntl bcmath gd intl zip
+# 3. Install PHP extensions (Wajib pdo_pgsql untuk Postgres)
+RUN docker-php-ext-install pdo_pgsql mbstring exif pcntl bcmath gd
 
-# 4. Install & Enable Redis (PENTING: Karena Anda pakai Redis)
-RUN pecl install redis && docker-php-ext-enable redis
-
-# 5. Install Composer (Copy dari image composer resmi)
+# 4. Get latest Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# 6. Set working directory
+# 5. Set working directory
 WORKDIR /var/www
 
-# 7. Copy seluruh file project ke dalam container
-COPY . /var/www
+# 6. Copy seluruh project
+COPY . .
 
-# 8. Ubah kepemilikan folder agar www-data bisa menulis (penting untuk storage/logs)
-RUN chown -R www-data:www-data /var/www
+# 7. Install PHP Dependencies
+RUN composer install --no-interaction --optimize-autoloader --no-dev
 
-# 9. Ganti user ke www-data
-USER www-data
+# 8. Install & Build Tailwind CSS
+RUN npm install && npm run build
 
-# 10. Expose port 9000 (Port default PHP-FPM)
+# 9. Set Permissions (Agar Laravel bisa tulis log & cache)
+RUN chown -R www-data:www-data /var/www \
+    && chmod -R 775 /var/www/storage \
+    && chmod -R 775 /var/www/bootstrap/cache
+
+# 10. Expose port 9000 and start php-fpm server
 EXPOSE 9000
-
-# 11. Perintah jalan
 CMD ["php-fpm"]
