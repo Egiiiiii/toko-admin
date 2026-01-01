@@ -3,15 +3,19 @@
 # -----------------------------
 FROM php:8.4-fpm AS base
 
+# Install system dependencies + Node.js
 RUN apt-get update && apt-get install -y \
     git curl openssh-client libpng-dev libonig-dev libxml2-dev \
     zip unzip libpq-dev libzip-dev libicu-dev \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
-    && docker-php-ext-configure intl \
-    && docker-php-ext-install pdo_pgsql mbstring exif pcntl bcmath gd zip intl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Install PHP extensions
+RUN docker-php-ext-configure intl \
+    && docker-php-ext-install pdo_pgsql mbstring exif pcntl bcmath gd zip intl
+
+# Install Composer (latest)
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 RUN composer config -g github-protocols https \
     && composer config -g process-timeout 2000
@@ -19,50 +23,76 @@ RUN composer config -g github-protocols https \
 WORKDIR /var/www
 
 # -----------------------------
-# Stage 1: Cache PHP dependencies
+# Stage 1: PHP Dependencies with Cache
 # -----------------------------
 FROM base AS php-deps
+
+WORKDIR /var/www
+
+# Copy only composer files
 COPY composer.json composer.lock ./
-RUN composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev --no-scripts
+
+# Arg untuk GitHub token (opsional, untuk rate-limit)
+ARG GITHUB_TOKEN
+RUN if [ -n "$GITHUB_TOKEN" ]; then composer config -g github-oauth.github.com $GITHUB_TOKEN; fi
+
+# Set memory unlimited & timeout tinggi
+ENV COMPOSER_MEMORY_LIMIT=-1
+
+# Install deps pakai prefer-dist & cache
+RUN composer install \
+    --no-interaction \
+    --prefer-dist \
+    --optimize-autoloader \
+    --no-dev \
+    --no-scripts \
+    --timeout=300 \
+    --prefer-stable \
+    --verbose
 
 # -----------------------------
-# Stage 2: Cache Node dependencies
+# Stage 2: Node Dependencies with Cache
 # -----------------------------
 FROM base AS node-deps
-COPY package.json package-lock.json vite.config.js ./
+
+WORKDIR /var/www
+
+# Copy package files only
+COPY package.json package-lock.json ./
+
+# Cache npm
+RUN mkdir -p /root/.npm
+
+# Install npm deps
 RUN npm ci --cache /root/.npm --prefer-offline --legacy-peer-deps --no-audit --no-fund
 
 # -----------------------------
-# Stage 3: Build frontend
-# -----------------------------
-FROM node-deps AS frontend-build
-COPY resources/js resources/js
-COPY resources/css resources/css
-RUN npm run build
-
-# -----------------------------
-# Stage 4: Final image
+# Stage 3: Final Build
 # -----------------------------
 FROM base AS final
 
 WORKDIR /var/www
 
-# Copy PHP vendor
+# Copy PHP deps
 COPY --from=php-deps /var/www/vendor ./vendor
 
-# Copy Node modules (optional, needed if runtime JS like Inertia uses SSR)
+# Copy Node deps
 COPY --from=node-deps /var/www/node_modules ./node_modules
 
-# Copy built frontend
-COPY --from=frontend-build /var/www/public/build ./public/build
-
-# Copy rest of the source code
+# Copy full source code
 COPY . .
 
-# Optimize composer autoload + permissions
+# Build frontend Vue
+RUN npm run build
+
+# Dump composer autoload & set permissions
 RUN composer dump-autoload --optimize \
     && chown -R www-data:www-data /var/www \
-    && chmod -R 775 /var/www/storage /var/www/bootstrap/cache
+    && chmod -R 775 /var/www/storage \
+    && chmod -R 775 /var/www/bootstrap/cache
 
+# Expose port
 EXPOSE 9000
+
+# Start PHP-FPM
 CMD ["php-fpm"]
