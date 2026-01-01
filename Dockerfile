@@ -3,40 +3,31 @@
 # -----------------------------
 FROM php:8.4-fpm AS base
 
-# 1. COPY script installer "ajaib" (mlocati)
-# Ini kunci agar install extension jadi ngebut karena pakai pre-compiled binaries
+# 1. Gunakan installer extension yang efisien (mlocati)
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 
-# 2. Install System Dependencies Dasar + Node.js
-# Note: Kita TIDAK PERLU lagi manual install libpng-dev, libzip-dev, dll.
-# Script 'install-php-extensions' akan otomatis mengurus library system yang dibutuhkan.
+# 2. Install system dependencies
 RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    unzip \
-    zip \
-    ca-certificates \
+    git curl unzip zip ca-certificates \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# 3. Install PHP Extensions (Sat-Set / Cepat)
+# 3. Install PHP extensions (Pre-compiled / Cepat)
 RUN install-php-extensions \
-    pdo_pgsql \
-    mbstring \
-    exif \
-    pcntl \
-    bcmath \
-    gd \
-    zip \
-    intl \
-    opcache 
-    # opcache sangat disarankan untuk production
+    pdo_pgsql mbstring exif pcntl bcmath gd zip intl opcache
 
-# 4. Install Composer & Config
+# 4. Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-RUN composer config -g github-protocols https \
-    && composer config -g process-timeout 2000
+
+# --- FIX UTAMA DISINI ---
+# Set Environment Variable agar berlaku global di semua stage
+# COMPOSER_PROCESS_TIMEOUT: Waktu tunggu (detik). 2000s = 33 menit.
+# COMPOSER_MEMORY_LIMIT: Unlimited memory (-1) agar tidak crash saat unzip file besar
+ENV COMPOSER_PROCESS_TIMEOUT=2000 \
+    COMPOSER_MEMORY_LIMIT=-1
+
+RUN composer config -g github-protocols https
 
 WORKDIR /var/www
 
@@ -46,24 +37,32 @@ WORKDIR /var/www
 FROM base AS php-deps
 
 ARG GITHUB_TOKEN
-# Copy composer files only to leverage Docker cache
+# Copy composer files
 COPY composer.json composer.lock ./
 
-# Pasang token GitHub jika ada
+# Pasang token GitHub jika ada (Sangat membantu speed jika punya token)
 RUN if [ -n "$GITHUB_TOKEN" ]; then composer config -g github-oauth.github.com $GITHUB_TOKEN; fi
 
-# Install dependencies PHP
-RUN composer install --prefer-dist --no-dev --no-scripts --optimize-autoloader --classmap-authoritative
+# Install dependencies
+# Tambahkan flag:
+# --no-interaction: Jangan tanya yes/no
+# --prefer-dist: Paksa download file zip (lebih cepat drpd git clone)
+RUN composer install \
+    --prefer-dist \
+    --no-dev \
+    --no-scripts \
+    --no-interaction \
+    --optimize-autoloader \
+    --classmap-authoritative
 
 # -----------------------------
 # Stage 2: Node Dependencies
 # -----------------------------
 FROM base AS node-deps
 
-# Copy package files only to leverage Docker cache
 COPY package.json package-lock.json ./
 
-# Install dependencies Node
+# Install node deps
 RUN npm ci --prefer-offline --legacy-peer-deps --no-audit --no-fund
 
 # -----------------------------
@@ -73,24 +72,17 @@ FROM base AS final
 
 WORKDIR /var/www
 
-# Copy PHP vendors dari stage 1
+# Copy vendor & node_modules
 COPY --from=php-deps /var/www/vendor ./vendor
-
-# Copy Node modules dari stage 2
 COPY --from=node-deps /var/www/node_modules ./node_modules
 
-# Copy full source code
+# Copy source code
 COPY . .
 
-# Build frontend Vue
+# Build frontend
 RUN npm run build
 
-# Opsional: Hapus node_modules setelah build selesai untuk memperkecil ukuran image
-# (Aktifkan baris di bawah jika aplikasi kamu tidak butuh nodejs saat runtime/SSR)
-# RUN rm -rf node_modules
-
-# Setup Permissions & Autoload
-# Note: chmod diubah sedikit agar lebih clean path-nya
+# Final cleanup & permission
 RUN composer dump-autoload --optimize \
     && chown -R www-data:www-data /var/www \
     && chmod -R 775 storage bootstrap/cache
