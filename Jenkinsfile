@@ -50,7 +50,7 @@ spec:
                     script {
                         docker.withRegistry('', DOCKER_CREDS) {
                             def testTag = "${env.BASE_TAG}-test"
-                            echo "Building Backend Image: ${testTag}"
+                            echo "Building Backend Imagee: ${testTag}"
 
                             // Build image dengan cache + GitHub token
                             sh """
