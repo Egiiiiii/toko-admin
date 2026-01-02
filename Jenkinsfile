@@ -27,8 +27,8 @@ spec:
         DOCKER_CREDS = 'docker-hub' 
         GIT_CREDS    = 'git-token'
         MANIFEST_REPO_URL = 'github.com/DevopsNaratel/deployment-manifests' 
-        MANIFEST_TEST_PATH = 'example-backend/dev/deployment.yaml'
-        MANIFEST_PROD_PATH = 'example-backend/prod/deployment.yaml'
+        MANIFEST_TEST_PATH = 'toko-admin/dev/deployment.yaml'
+        MANIFEST_PROD_PATH = 'toko-admin/prod/deployment.yaml'
     }
 
     stages {
