@@ -50,19 +50,19 @@ spec:
                     script {
                         docker.withRegistry('', DOCKER_CREDS) {
                             def testTag = "${env.BASE_TAG}-test"
-                            echo "Building Backend Image: ${testTag}"
-
-                            // List workspace, optional
-                            sh 'ls -la'
-
-                            // Gunakan Docker build cache dari image sebelumnya (jika ada)
-                            def buildArgs = "--pull --build-arg COMPOSER_CACHE_DIR=/tmp/composer_cache --build-arg NPM_CACHE_DIR=/tmp/npm_cache"
                             
-                            // Build image
-                            def testImage = docker.build("${DOCKER_IMAGE}:${testTag}", buildArgs + " .")
+                            // Aktifkan DOCKER_BUILDKIT
+                            env.DOCKER_BUILDKIT = '1' 
                             
-                            // Push image ke registry
-                            testImage.push()
+                            // Gunakan cache-from agar layer build sebelumnya dipakai ulang
+                            // Ini SANGAT membantu jika Jenkins runner Anda berganti-ganti (ephemeral)
+                            def buildArgs = "--build-arg BUILDKIT_INLINE_CACHE=1 --cache-from ${DOCKER_IMAGE}:latest"
+                            
+                            // Build
+                            sh "docker build ${buildArgs} -t ${DOCKER_IMAGE}:${testTag} ."
+                            
+                            // Push
+                            sh "docker push ${DOCKER_IMAGE}:${testTag}"
                         }
                     }
                 }
