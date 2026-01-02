@@ -1,109 +1,51 @@
-# ==============================================================================
-# Stage 0: Base PHP (System Deps & Extensions)
-# ==============================================================================
-FROM php:8.4-fpm AS base
-
-# 1. FIX JARINGAN (CRITICAL): Paksa Linux menggunakan IPv4
-#    Ini mengatasi 'curl error 28' dan timeout saat connect ke GitHub/Packagist
-RUN echo "precedence ::ffff:0:0/96  100" >> /etc/gai.conf
-
-# 2. Install System Dependencies Dasar
-RUN apt-get update && apt-get install -y \
-    git \
-    unzip \
-    zip \
-    ca-certificates \
-    curl \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# 3. Install PHP Extensions (via mlocati installer - lebih stabil)
-COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
-RUN install-php-extensions \
-    pdo_pgsql \
-    mbstring \
-    exif \
-    pcntl \
-    bcmath \
-    gd \
-    zip \
-    intl \
-    opcache
-
-# 4. Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-
-WORKDIR /var/www
-
-# ==============================================================================
-# Stage 1: Node Builder (Frontend Build)
-# ==============================================================================
-# Menggunakan image node asli agar build lebih cepat & cache terpisah
-FROM node:20-slim AS node-builder
-
+# --- STAGE 1: Build PHP Dependencies (Composer) ---
+FROM composer:2 AS deps
 WORKDIR /app
+COPY src/composer.json src/composer.lock ./
+RUN composer install --no-dev --optimize-autoloader --ignore-platform-reqs --no-scripts --prefer-dist
 
-# Copy package files dulu untuk caching layer
-COPY package.json package-lock.json ./
+# --- STAGE 2: Build Frontend Assets (Node.js) ---
+FROM node:20-alpine AS node_build
+WORKDIR /app
+# Copy source code
+COPY src .
 
-# Install npm dependencies (ci lebih cepat untuk environment CI/CD)
-RUN npm ci --prefer-offline --no-audit
+# ### PERBAIKAN DISINI ###
+# Kita butuh folder vendor agar Ziggy bisa ditemukan oleh Vite
+COPY --from=deps /app/vendor ./vendor
+# ######################
 
-# Copy source code frontend dan build
-COPY . .
+# Install dependensi node & build assets
+RUN npm ci
 RUN npm run build
 
-# ==============================================================================
-# Stage 2: PHP Builder (Backend Dependencies)
-# ==============================================================================
-FROM base AS php-builder
+# --- STAGE 3: Runtime (PHP-FPM) ---
+FROM php:8.4-fpm-alpine
 
-# Copy composer files dulu
-COPY composer.json composer.lock ./
+# Install library sistem
+RUN apk add --no-cache postgresql-dev libzip-dev zip unzip bash
 
-# 1. FIX GIT & COMPOSER TIMEOUT (CRITICAL)
-#    - process-timeout: naikkan ke 2000 detik agar tidak putus saat download lambat
-#    - git postBuffer: perbesar buffer agar tidak 'Connection reset'
-#    - sslVerify false: cegah error sertifikat di environment corporate/proxy
-#    - github-protocols: paksa HTTPS, jangan pernah coba SSH
-RUN composer config --global process-timeout 2000 \
-    && git config --global http.postBuffer 524288000 \
-    && git config --global http.sslVerify false \
-    && composer config -g github-protocols https
+# Install Ekstensi PHP
+RUN docker-php-ext-install pdo pdo_pgsql zip opcache pcntl
 
-# 2. Install Dependencies Production
-#    --no-dev: Buang library testing (phpunit, faker, dll) agar ringan
-#    --ignore-platform-reqs: Mencegah error jika versi extension lokal beda sedikit
-RUN composer install \
-    --prefer-dist \
-    --no-dev \
-    --no-scripts \
-    --no-interaction \
-    --optimize-autoloader \
-    --no-progress \
-    --ignore-platform-reqs
+# Konfigurasi PHP-FPM
+RUN sed -i 's|listen = 127.0.0.1:9000|listen = 9000|' /usr/local/etc/php-fpm.d/www.conf
 
-# ==============================================================================
-# Stage 3: Final Image (Runtime)
-# ==============================================================================
-FROM base AS final
+WORKDIR /var/www/html
 
-WORKDIR /var/www
+# 1. Copy Vendor dari Stage 1
+COPY --from=deps /app/vendor ./vendor
 
-# 1. Copy Vendor dari Stage PHP Builder
-COPY --from=php-builder /var/www/vendor ./vendor
+# 2. Copy Source Code Aplikasi
+COPY src .
 
-# 2. Copy Assets Public (CSS/JS) dari Stage Node Builder
-#    HANYA folder public/ yang dicopy. node_modules DIBUANG.
-COPY --from=node-builder /app/public ./public
+# 3. Copy Hasil Build Frontend dari Stage 2
+COPY --from=node_build /app/public/build ./public/build
 
-# 3. Copy Source Code Aplikasi
-COPY . .
-
-# 4. Setup Permission & Optimization
-#    Pastikan folder storage bisa ditulis oleh www-data
-RUN chown -R www-data:www-data /var/www \
-    && chmod -R 775 storage bootstrap/cache \
-    && composer dump-autoload --optimize
+# Copy entrypoint
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 EXPOSE 9000
+ENTRYPOINT ["entrypoint.sh"]
 CMD ["php-fpm"]
