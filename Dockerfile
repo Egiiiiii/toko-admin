@@ -1,51 +1,67 @@
-# --- STAGE 1: Build PHP Dependencies (Composer) ---
-FROM composer:2 AS deps
-WORKDIR /app
-COPY src/composer.json src/composer.lock ./
+# ------------------------------------------------------------------------------
+# Stage 1: Build PHP Dependencies (Base Debian untuk Network Stability)
+# ------------------------------------------------------------------------------
+FROM php:8.4-fpm AS deps
+
+# FIX JARINGAN (Wajib ada biar gak timeout lagi)
+RUN echo "precedence ::ffff:0:0/96  100" >> /etc/gai.conf
+
+RUN apt-get update && apt-get install -y git unzip zip \
+    && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+WORKDIR /var/www
+
+COPY composer.json composer.lock ./
+
+# Config Network Composer
+RUN composer config --global process-timeout 2000 \
+    && git config --global http.postBuffer 524288000
+
 RUN composer install --no-dev --optimize-autoloader --ignore-platform-reqs --no-scripts --prefer-dist
 
-# --- STAGE 2: Build Frontend Assets (Node.js) ---
-FROM node:20-alpine AS node_build
+# ------------------------------------------------------------------------------
+# Stage 2: Build Frontend (Node) - Dengan Cache & Vendor Ziggy
+# ------------------------------------------------------------------------------
+FROM node:20-slim AS node_build
+
 WORKDIR /app
-# Copy source code
-COPY src .
 
-# ### PERBAIKAN DISINI ###
-# Kita butuh folder vendor agar Ziggy bisa ditemukan oleh Vite
-COPY --from=deps /app/vendor ./vendor
-# ######################
+# 1. Copy package files DULUAN (Biar Cache NPM jalan)
+COPY package.json package-lock.json ./
+RUN npm ci --prefer-offline --no-audit
 
-# Install dependensi node & build assets
-RUN npm ci
+# 2. Copy Vendor dari stage 1 (Agar Ziggy/Vite bisa baca route Laravel)
+COPY --from=deps /var/www/vendor ./vendor
+
+# 3. Baru Copy source code sisanya
+COPY . .
+
+# 4. Build
 RUN npm run build
 
-# --- STAGE 3: Runtime (PHP-FPM) ---
-FROM php:8.4-fpm-alpine
+# ------------------------------------------------------------------------------
+# Stage 3: Runtime
+# ------------------------------------------------------------------------------
+FROM php:8.4-fpm
 
-# Install library sistem
-RUN apk add --no-cache postgresql-dev libzip-dev zip unzip bash
+# Install Extension dengan installer (Lebih mudah daripada manual)
+COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
+RUN install-php-extensions pdo_pgsql zip opcache pcntl intl gd bcmath
 
-# Install Ekstensi PHP
-RUN docker-php-ext-install pdo pdo_pgsql zip opcache pcntl
+WORKDIR /var/www
 
-# Konfigurasi PHP-FPM
-RUN sed -i 's|listen = 127.0.0.1:9000|listen = 9000|' /usr/local/etc/php-fpm.d/www.conf
+# Copy Vendor
+COPY --from=deps /var/www/vendor ./vendor
 
-WORKDIR /var/www/html
+# Copy Source Code
+COPY . .
 
-# 1. Copy Vendor dari Stage 1
-COPY --from=deps /app/vendor ./vendor
-
-# 2. Copy Source Code Aplikasi
-COPY src .
-
-# 3. Copy Hasil Build Frontend dari Stage 2
+# Copy Hasil Build JS/CSS
 COPY --from=node_build /app/public/build ./public/build
 
-# Copy entrypoint
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+# Permission
+RUN chown -R www-data:www-data /var/www \
+    && chmod -R 775 storage bootstrap/cache
 
 EXPOSE 9000
-ENTRYPOINT ["entrypoint.sh"]
 CMD ["php-fpm"]
