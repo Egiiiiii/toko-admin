@@ -3,30 +3,26 @@
 # -----------------------------
 FROM php:8.4-fpm AS base
 
-# PHP extension installer
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 
-# System deps + Node
 RUN apt-get update && apt-get install -y \
     git curl unzip zip ca-certificates \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# PHP extensions (precompiled & fast)
 RUN install-php-extensions \
     pdo_pgsql mbstring exif pcntl bcmath gd zip intl opcache
 
-# Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# 🚑 Composer Network Hardening (FIXED)
+# 🧬 Composer stability flags (VALID)
 ENV COMPOSER_PROCESS_TIMEOUT=2000 \
-    COMPOSER_MEMORY_LIMIT=-1
+    COMPOSER_MEMORY_LIMIT=-1 \
+    COMPOSER_ALLOW_SUPERUSER=1 \
+    COMPOSER_DISABLE_XDEBUG_WARN=1
 
-RUN composer config -g http.timeout 2000 \
-    && composer config -g curl.timeout 2000 \
-    && composer config -g github-protocols https
+RUN composer config -g github-protocols https
 
 WORKDIR /var/www
 
@@ -39,7 +35,6 @@ ARG GITHUB_TOKEN
 
 COPY composer.json composer.lock ./
 
-# Optional GitHub token (recommended for speed & no rate-limit)
 RUN if [ -n "$GITHUB_TOKEN" ]; then \
       composer config -g github-oauth.github.com $GITHUB_TOKEN ; \
     fi
