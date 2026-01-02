@@ -1,33 +1,30 @@
 # -----------------------------
-# Stage 0: Base PHP + Node.js (OPTIMIZED)
+# Stage 0: Base PHP + Node.js (ULTRA STABLE)
 # -----------------------------
 FROM php:8.4-fpm AS base
 
-# 1. Gunakan installer extension yang efisien (mlocati)
+# PHP extension installer
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 
-# 2. Install system dependencies
+# System deps + Node
 RUN apt-get update && apt-get install -y \
     git curl unzip zip ca-certificates \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# 3. Install PHP extensions (Pre-compiled / Cepat)
+# PHP extensions (precompiled)
 RUN install-php-extensions \
     pdo_pgsql mbstring exif pcntl bcmath gd zip intl opcache
 
-# 4. Install Composer
+# Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# --- FIX UTAMA DISINI ---
-# Set Environment Variable agar berlaku global di semua stage
-# COMPOSER_PROCESS_TIMEOUT: Waktu tunggu (detik). 2000s = 33 menit.
-# COMPOSER_MEMORY_LIMIT: Unlimited memory (-1) agar tidak crash saat unzip file besar
-ENV COMPOSER_PROCESS_TIMEOUT=2000 \
-    COMPOSER_MEMORY_LIMIT=-1
-
-RUN composer config -g github-protocols https
+# 🚑 Composer Network Hardening (CRITICAL)
+RUN composer config -g process-timeout 2000 \
+    && composer config -g http.timeout 2000 \
+    && composer config -g curl.timeout 2000 \
+    && composer config -g github-protocols https
 
 WORKDIR /var/www
 
@@ -37,23 +34,23 @@ WORKDIR /var/www
 FROM base AS php-deps
 
 ARG GITHUB_TOKEN
-# Copy composer files
+
 COPY composer.json composer.lock ./
 
-# Pasang token GitHub jika ada (Sangat membantu speed jika punya token)
-RUN if [ -n "$GITHUB_TOKEN" ]; then composer config -g github-oauth.github.com $GITHUB_TOKEN; fi
+# Optional GitHub token (recommended)
+RUN if [ -n "$GITHUB_TOKEN" ]; then \
+      composer config -g github-oauth.github.com $GITHUB_TOKEN ; \
+    fi
 
-# Install dependencies
-# Tambahkan flag:
-# --no-interaction: Jangan tanya yes/no
-# --prefer-dist: Paksa download file zip (lebih cepat drpd git clone)
 RUN composer install \
     --prefer-dist \
     --no-dev \
     --no-scripts \
     --no-interaction \
     --optimize-autoloader \
-    --classmap-authoritative
+    --classmap-authoritative \
+    --no-progress \
+    --no-ansi
 
 # -----------------------------
 # Stage 2: Node Dependencies
@@ -62,7 +59,6 @@ FROM base AS node-deps
 
 COPY package.json package-lock.json ./
 
-# Install node deps
 RUN npm ci --prefer-offline --legacy-peer-deps --no-audit --no-fund
 
 # -----------------------------
@@ -72,17 +68,13 @@ FROM base AS final
 
 WORKDIR /var/www
 
-# Copy vendor & node_modules
 COPY --from=php-deps /var/www/vendor ./vendor
 COPY --from=node-deps /var/www/node_modules ./node_modules
 
-# Copy source code
 COPY . .
 
-# Build frontend
 RUN npm run build
 
-# Final cleanup & permission
 RUN composer dump-autoload --optimize \
     && chown -R www-data:www-data /var/www \
     && chmod -R 775 storage bootstrap/cache
