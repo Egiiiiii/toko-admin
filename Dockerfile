@@ -13,16 +13,18 @@ RUN apt-get update && apt-get install -y \
     && apt-get install -y nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# PHP extensions (precompiled)
+# PHP extensions (precompiled & fast)
 RUN install-php-extensions \
     pdo_pgsql mbstring exif pcntl bcmath gd zip intl opcache
 
 # Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# 🚑 Composer Network Hardening (CRITICAL)
-RUN composer config -g process-timeout 2000 \
-    && composer config -g http.timeout 2000 \
+# 🚑 Composer Network Hardening (FIXED)
+ENV COMPOSER_PROCESS_TIMEOUT=2000 \
+    COMPOSER_MEMORY_LIMIT=-1
+
+RUN composer config -g http.timeout 2000 \
     && composer config -g curl.timeout 2000 \
     && composer config -g github-protocols https
 
@@ -37,7 +39,7 @@ ARG GITHUB_TOKEN
 
 COPY composer.json composer.lock ./
 
-# Optional GitHub token (recommended)
+# Optional GitHub token (recommended for speed & no rate-limit)
 RUN if [ -n "$GITHUB_TOKEN" ]; then \
       composer config -g github-oauth.github.com $GITHUB_TOKEN ; \
     fi
