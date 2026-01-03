@@ -13,7 +13,7 @@ storage/framework/sessions/*
 storage/framework/views/*
 
 tests
-docker
+# docker
 docker-compose.yml
 
 *.md
