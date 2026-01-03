@@ -39,9 +39,15 @@ RUN npm run build
 # ------------------------------------------------------------------------------
 FROM php:8.4-fpm
 
-# 1. Install Nginx DAN gettext-base (alat untuk ganti variabel)
+# 1. Install Nginx, Gettext-base, dan HAPUS CONFIG DEFAULT
+# ---------------------------------------------------------
+# Saya gabungkan di sini agar layer image tetap rapi.
+# Perintah 'rm -f ...' akan menghapus config "Welcome to Nginx" segera setelah terinstall.
 RUN apt-get update && apt-get install -y nginx gettext-base \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -f /etc/nginx/sites-enabled/default
+
+# ---------------------------------------------------------
 
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 RUN install-php-extensions pdo_pgsql zip opcache pcntl intl gd bcmath
