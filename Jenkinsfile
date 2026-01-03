@@ -43,6 +43,20 @@ spec:
                 }
             }
         }
+        stage('Debug Workspace') {
+            steps {
+                sh '''
+                    echo "=== Current Branch ==="
+                    git branch --show-current || true
+
+                    echo "=== List docker folder ==="
+                    ls -lah docker || true
+
+                    echo "=== Workspace Root ==="
+                    ls -lah
+                '''
+            }
+        }
 
         stage('Build & Push (TEST Image)') {
             steps {
