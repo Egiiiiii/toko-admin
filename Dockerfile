@@ -39,8 +39,8 @@ RUN npm run build
 # ------------------------------------------------------------------------------
 FROM php:8.4-fpm
 
-# Install Nginx + PHP Extensions
-RUN apt-get update && apt-get install -y nginx \
+# 1. Install Nginx DAN gettext-base (alat untuk ganti variabel)
+RUN apt-get update && apt-get install -y nginx gettext-base \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
@@ -52,8 +52,11 @@ COPY --from=deps /var/www/vendor ./vendor
 COPY . .
 COPY --from=node_build /app/public/build ./public/build
 
-# Copy Nginx config
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+# 2. Copy config mentah (yang ada variabel ${PHP_UPSTREAM}) jadi template
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf.template
+
+# 3. Set Default Variabel (Biar langsung jalan di Kubernetes)
+ENV PHP_UPSTREAM="127.0.0.1:9000"
 
 # Permission
 RUN chown -R www-data:www-data /var/www \
@@ -61,5 +64,6 @@ RUN chown -R www-data:www-data /var/www \
 
 EXPOSE 80
 
-# Start both PHP-FPM & Nginx
-CMD ["sh", "-c", "php-fpm -D && nginx -g 'daemon off;'"]
+# 4. CMD "Sakti" (Pengganti entrypoint.sh)
+# Logic: "Ambil template -> Ganti ${PHP_UPSTREAM} jadi 127.0.0.1 -> Simpan jadi config asli -> Jalankan App"
+CMD ["sh", "-c", "envsubst '${PHP_UPSTREAM}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && php-fpm -D && nginx -g 'daemon off;'"]
