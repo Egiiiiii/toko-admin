@@ -5,7 +5,7 @@ namespace Database\Factories;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Brand>
+ * @extends Factory<\App\Models\Brand>
  */
 class BrandFactory extends Factory
 {
@@ -17,9 +17,9 @@ class BrandFactory extends Factory
     public function definition(): array
     {
         return [
-            'name' => fake()->company(),
-            'website' => fake()->url(),
-            'created_at' => fake()->dateTimeBetween('-1 year', 'now'),
+            'name'       => $this->faker->company(),
+            'website'    => $this->faker->url(),
+            'created_at' => $this->faker->dateTimeBetween('-1 year', 'now'),
         ];
     }
 }

@@ -5,7 +5,7 @@ namespace Database\Factories;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Customer>
+ * @extends Factory<\App\Models\Customer>
  */
 class CustomerFactory extends Factory
 {
@@ -17,11 +17,11 @@ class CustomerFactory extends Factory
     public function definition(): array
     {
         return [
-            'name' => fake()->name(),
-            'email' => fake()->unique()->safeEmail(),
-            'phone' => fake()->phoneNumber(),
-            'address' => fake()->address(),
-            'created_at' => fake()->dateTimeBetween('-1 year', 'now'), // Customer mendaftar acak setahun ini
+            'name'       => $this->faker->name(),
+            'email'      => $this->faker->unique()->safeEmail(),
+            'phone'      => $this->faker->phoneNumber(),
+            'address'    => $this->faker->address(),
+            'created_at' => $this->faker->dateTimeBetween('-1 year', 'now'),
         ];
     }
 }
