@@ -15,7 +15,6 @@ pipeline {
             steps {
                 checkout scm
                 script {
-                    // Git commands run fine in the default 'jnlp' container
                     def commitHash = sh(returnStdout: true, script: "git rev-parse --short HEAD").trim()
                     env.BASE_TAG = "build-${BUILD_NUMBER}-${commitHash}" 
                     currentBuild.displayName = "#${BUILD_NUMBER} Backend (${env.BASE_TAG})"
@@ -25,29 +24,25 @@ pipeline {
 
         stage('Build & Push (TEST Image)') {
             steps {
-                container('docker') {
-                    script {
-                        docker.withRegistry('', DOCKER_CREDS) {
-                            def testTag = "${env.BASE_TAG}-test"
-                            
-                            // Aktifkan DOCKER_BUILDKIT
-                            env.DOCKER_BUILDKIT = '1' 
-                            
-                            // Gunakan cache-from agar layer build sebelumnya dipakai ulang
-                            // Ini SANGAT membantu jika Jenkins runner Anda berganti-ganti (ephemeral)
-                            def buildArgs = "--build-arg BUILDKIT_INLINE_CACHE=1 --cache-from ${DOCKER_IMAGE}:latest"
-                            
-                            // Build
-                            sh "docker build ${buildArgs} -t ${DOCKER_IMAGE}:${testTag} ."
-                            
-                            // Push
-                            sh "docker push ${DOCKER_IMAGE}:${testTag}"
-                        }
+                script {
+                    docker.withRegistry('', DOCKER_CREDS) {
+                        def testTag = "${env.BASE_TAG}-test"
+                        
+                        // Aktifkan BuildKit
+                        env.DOCKER_BUILDKIT = '1'
+                        
+                        // Gunakan cache-from agar layer build sebelumnya dipakai ulang
+                        def buildArgs = "--build-arg BUILDKIT_INLINE_CACHE=1 --cache-from ${DOCKER_IMAGE}:latest"
+                        
+                        // Build Docker Image
+                        sh "docker build ${buildArgs} -t ${DOCKER_IMAGE}:${testTag} ."
+                        
+                        // Push ke Docker Hub
+                        sh "docker push ${DOCKER_IMAGE}:${testTag}"
                     }
                 }
             }
         }
-
 
         stage('Update Manifest (TEST)') {
             steps {
@@ -60,7 +55,7 @@ pipeline {
                             sh 'git config user.name "Jenkins Pipeline"'
                             sh "sed -i 's|image: ${DOCKER_IMAGE}:.*|image: ${DOCKER_IMAGE}:${env.BASE_TAG}-test|g' ${MANIFEST_TEST_PATH}"
                             sh "git add ."
-                            sh "git commit -m 'Deploy Backend TEST: ${env.BASE_TAG}-test [skip ci]'"
+                            sh "git commit -m 'Deploy Backend TEST: ${env.BASE_TAG}-test [skip ci]' || echo 'No changes to commit'"
                             sh "git push origin main"
                         }
                     }
@@ -76,19 +71,17 @@ pipeline {
 
         stage('Build & Push (PROD Image)') {
             steps {
-                // FIX: Docker commands (pull/push) need the 'docker' container
-                container('docker') {
-                    script {
-                        docker.withRegistry('', DOCKER_CREDS) {
-                            def testImage = docker.image("${DOCKER_IMAGE}:${env.BASE_TAG}-test")
-                            def prodTag = "${env.BASE_TAG}-prod"
-                            
-                            testImage.pull() 
-                            testImage.push(prodTag)
-                            testImage.push('latest')
-                            
-                            echo "Image berhasil dipromosikan ke PROD: ${prodTag}"
-                        }
+                script {
+                    docker.withRegistry('', DOCKER_CREDS) {
+                        def testImage = docker.image("${DOCKER_IMAGE}:${env.BASE_TAG}-test")
+                        def prodTag = "${env.BASE_TAG}-prod"
+                        
+                        // Pull image TEST untuk dipromosikan ke PROD
+                        testImage.pull() 
+                        testImage.push(prodTag)
+                        testImage.push('latest')
+                        
+                        echo "Image berhasil dipromosikan ke PROD: ${prodTag}"
                     }
                 }
             }
@@ -102,12 +95,18 @@ pipeline {
                             sh "git pull origin main" 
                             sh "sed -i 's|image: ${DOCKER_IMAGE}:.*|image: ${DOCKER_IMAGE}:${env.BASE_TAG}-prod|g' ${MANIFEST_PROD_PATH}"
                             sh "git add ."
-                            sh "git commit -m 'Promote Backend PROD: ${env.BASE_TAG}-prod [skip ci]'"
+                            sh "git commit -m 'Promote Backend PROD: ${env.BASE_TAG}-prod [skip ci]' || echo 'No changes to commit'"
                             sh "git push origin main"
                         }
                     }
                 }
             }
+        }
+    }
+
+    post {
+        always {
+            echo "Pipeline selesai: #${BUILD_NUMBER}"
         }
     }
 }
