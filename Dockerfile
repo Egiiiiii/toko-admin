@@ -31,6 +31,9 @@ RUN npm ci --prefer-offline --no-audit
 COPY . .
 COPY --from=deps /var/www/vendor ./vendor
 
+ENV VITE_APP_NAME="TokoAdmin"
+ENV VITE_API_BASE_URL="https://api.roomify3.my.id"
+ENV VITE_ADMIN_URL="https://api.roomify3.my.id/admin"
 
 RUN npm run build
 
@@ -70,13 +73,9 @@ WORKDIR /var/www
 
 # --- PERBAIKAN URUTAN COPY (Agar aman menimpa file lokal) ---
 # 1. Copy App Code dulu
-COPY . .
-
-# 2. Copy Vendor (Menimpa vendor lokal jika ada)
-COPY --from=deps /var/www/vendor ./vendor
-
-# 3. Copy Assets Frontend
-COPY --from=node_build /app/public/build ./public/build
+COPY --chown=www-data:www-data . .
+COPY --chown=www-data:www-data --from=deps /var/www/vendor ./vendor
+COPY --chown=www-data:www-data --from=node_build /app/public/build ./public/build
 # ------------------------------------------------------------
 
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf.template
@@ -84,8 +83,7 @@ COPY docker/nginx.conf /etc/nginx/conf.d/default.conf.template
 ENV PHP_UPSTREAM="127.0.0.1:9000"
 
 # Permission & Laravel Optimization (Optional tapi recommended)
-RUN chown -R www-data:www-data /var/www \
-    && chmod -R 775 storage bootstrap/cache
+RUN chmod -R 775 storage bootstrap/cache
 
 EXPOSE 80
 
