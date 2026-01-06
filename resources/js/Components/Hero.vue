@@ -16,7 +16,7 @@ defineProps({
         <div class="max-w-7xl mx-auto px-4 py-20 relative z-10">
             <div class="text-center">
                 <h1 class="text-5xl md:text-6xl font-extrabold mb-6 tracking-tight">
-                    Belanja Cerdas,<br>Harga Hemat
+                    Belanja Cerdas,<br>Harga Hematt
                 </h1>
                 
                 <p class="text-xl text-blue-100 max-w-2xl mx-auto mb-8">
