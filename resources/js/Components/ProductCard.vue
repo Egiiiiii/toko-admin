@@ -9,18 +9,31 @@ const props = defineProps({
     }
 });
 
+// --- PERBAIKAN DI SINI ---
+// Ambil URL API dari env
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+
 const formatRupiah = (number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
 };
 
+// Update logic imageUrl agar mengarah ke API Backend
 const imageUrl = computed(() => {
-    return props.product.image ? `/storage/${props.product.image}` : null;
+    if (!props.product.image) return null;
+
+    // Jika image sudah berupa full URL (misal dari S3 atau link luar), biarkan
+    if (props.product.image.startsWith('http')) {
+        return props.product.image;
+    }
+
+    // Jika path lokal, tambahkan domain API di depannya
+    return `${apiBaseUrl}/storage/${props.product.image}`;
 });
+// -------------------------
 </script>
 
 <template>
     <div class="bg-white rounded-2xl shadow-lg border border-gray-100 hover:shadow-2xl transition-all duration-300 flex flex-col h-full group hover:-translate-y-2">
-        <!-- Menggunakan route() global -->
         <Link :href="product.id ? route('product.show', product.id) : '#'" 
            class="relative aspect-square overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 rounded-t-2xl block">
             

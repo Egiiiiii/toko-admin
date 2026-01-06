@@ -8,6 +8,21 @@ defineProps({
     }
 });
 
+// --- PERBAIKAN DI SINI ---
+// Ambil URL API dari Environment Variable
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+
+// Helper untuk generate URL gambar yang benar (mengarah ke API)
+const getImageUrl = (path) => {
+    if (!path) return null;
+    // Jika path sudah full URL (misal dari S3), biarkan
+    if (path.startsWith('http')) return path;
+    
+    // Jika path lokal, gabungkan dengan domain API
+    return `${apiBaseUrl}/storage/${path}`;
+};
+// -------------------------
+
 const formatRupiah = (number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
 };
@@ -33,7 +48,9 @@ const formatRupiah = (number) => {
                 <div v-for="product in products" :key="product.id" class="flex-none w-72 snap-start">
                     <div class="bg-white rounded-2xl shadow-lg border border-gray-100 hover:shadow-2xl transition-all duration-300 flex flex-col h-full group hover:-translate-y-2">
                         <Link :href="route('product.show', product.id)" class="relative aspect-square overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 rounded-t-2xl block">
-                            <img v-if="product.image" :src="`/storage/${product.image}`" class="object-cover w-full h-full group-hover:scale-110 transition duration-500">
+                            
+                            <img v-if="product.image" :src="getImageUrl(product.image)" class="object-cover w-full h-full group-hover:scale-110 transition duration-500">
+                            
                             <div v-else class="flex items-center justify-center h-full text-gray-300">
                                 <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                             </div>

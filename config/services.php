@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'roomify' => [
+        // Ini akan membaca API_BASE_URL dari .env
+        // Jika kosong, default ke APP_URL
+        'base_url' => env('API_BASE_URL', env('APP_URL')),
+    ],
+
 ];

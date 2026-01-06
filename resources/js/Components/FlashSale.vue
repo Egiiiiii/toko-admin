@@ -12,15 +12,32 @@ defineProps({
 const countdown = ref('02:45:30');
 let timer = null;
 
+// --- PERBAIKAN DI SINI ---
+// Mengambil Base URL API dari environment variable (Vite)
+// Jika di development lokal biasa, fallback ke string kosong (relative path)
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+
+// Fungsi helper untuk generate URL gambar yang benar
+const getImageUrl = (path) => {
+    if (!path) return null;
+    // Jika path sudah mengandung http (misal dari S3/Cloudinary), biarkan saja
+    if (path.startsWith('http')) return path;
+    
+    // Jika tidak, gabungkan dengan API Base URL
+    // Hasilnya: https://api.roomify3.my.id/storage/nama-gambar.jpg
+    return `${apiBaseUrl}/storage/${path}`;
+};
+// -------------------------
+
 const formatRupiah = (number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
 };
 
-// Generate random number untuk progress bar (mirip rand(40,90) di PHP)
+// Generate random number untuk progress bar
 const getRandomProgress = () => Math.floor(Math.random() * (90 - 40 + 1)) + 40;
 
 onMounted(() => {
-    let timeLeft = 2 * 3600 + 45 * 60 + 30; // 2:45:30
+    let timeLeft = 2 * 3600 + 45 * 60 + 30; 
     timer = setInterval(() => {
         if (timeLeft > 0) {
             timeLeft--;
@@ -60,7 +77,7 @@ onUnmounted(() => {
                 <div v-for="product in products" :key="product.id" class="bg-white rounded-xl p-3 text-gray-900 shadow-lg hover:-translate-y-1 transition duration-300">
                     <Link :href="route('product.show', product.id)" class="block">
                         <div class="aspect-square bg-gray-100 rounded-lg mb-3 overflow-hidden relative">
-                             <img v-if="product.image" :src="`/storage/${product.image}`" class="object-cover w-full h-full">
+                             <img v-if="product.image" :src="getImageUrl(product.image)" class="object-cover w-full h-full">
                             <div v-else class="w-full h-full bg-gray-200 flex items-center justify-center text-gray-400 text-xs">No Image</div>
                             <span class="absolute top-2 right-2 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-md animate-pulse">-50%</span>
                         </div>
