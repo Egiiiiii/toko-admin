@@ -12,6 +12,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // --- TAMBAHAN PENTING ---
+        // Memberitahu Laravel untuk mempercayai header dari Nginx/Docker
+        // Ini akan memperbaiki masalah HTTP vs HTTPS
+        $middleware->trustProxies(at: '*'); 
+
         $middleware->web(append: [
             HandleInertiaRequests::class,
         ]);
