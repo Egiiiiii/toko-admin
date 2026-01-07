@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\URL; // <--- INI YANG HILANG SEBELUMNYA
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -19,7 +20,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        if (app()->environment('production') || app()->environment('local')) {
+        // Paksa HTTPS agar tidak error "Not Secure" dan Cookie Login bisa tersimpan
+        if($this->app->environment('production') || $this->app->environment('local')) {
             URL::forceScheme('https');
         }
     }
