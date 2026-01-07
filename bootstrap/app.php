@@ -17,6 +17,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // Ini akan memperbaiki masalah HTTP vs HTTPS
         $middleware->trustProxies(at: '*'); 
 
+        $middleware->append(\Illuminate\Http\Middleware\HandleCors::class);
+
         $middleware->web(append: [
             HandleInertiaRequests::class,
         ]);
