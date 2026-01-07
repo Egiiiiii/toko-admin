@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKER_IMAGE = 'diwamln/toko-admin' 
         DOCKER_CREDS = 'docker-hub' 
-        GIT_CREDS    = '72ba493d-9fce-4e2d-8f30-6dc7ebd3a77e'
+        GIT_CREDS    = 'git-token'
         MANIFEST_REPO_URL = 'github.com/DevopsNaratel/deployment-manifests' 
         MANIFEST_TEST_PATH = 'toko-admin/dev/deployment.yaml'
         MANIFEST_PROD_PATH = 'toko-admin/prod/deployment.yaml'
